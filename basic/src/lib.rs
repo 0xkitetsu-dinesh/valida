@@ -16,7 +16,7 @@ use p3_matrix::{Dimensions, Matrix, MatrixRowSlices};
 use p3_maybe_rayon::*;
 use p3_util::{log2_ceil_usize, log2_strict_usize};
 use valida_alu_u32::{
-    add::{Add32Chip, Add32Instruction, MachineWithAdd32Chip},
+    add::{Add32Chip, Add32Instruction, MachineWithAdd32Chip, AddCarry32Instruction},
     bitwise::{
         And32Instruction, Bitwise32Chip, MachineWithBitwise32Chip, Or32Instruction,
         Xor32Instruction,
@@ -81,6 +81,7 @@ pub struct BasicMachine<F: PrimeField32 + TwoAdicField> {
 
     // ALU instructions
     add32: Add32Instruction,
+    addc32:AddCarry32Instruction,
     sub32: Sub32Instruction,
     mul32: Mul32Instruction,
     mulhs32: Mulhs32Instruction,
@@ -1113,6 +1114,9 @@ impl<F: PrimeField32 + TwoAdicField> Machine<F> for BasicMachine<F> {
             }
             <Add32Instruction as Instruction<Self, F>>::OPCODE => {
                 Add32Instruction::execute_with_advice::<Adv>(self, ops, advice)
+            }
+            <AddCarry32Instruction as Instruction<Self, F>>::OPCODE => {
+                AddCarry32Instruction::execute_with_advice::<Adv>(self, ops, advice)
             }
             <Sub32Instruction as Instruction<Self, F>>::OPCODE => {
                 Sub32Instruction::execute_with_advice::<Adv>(self, ops, advice)

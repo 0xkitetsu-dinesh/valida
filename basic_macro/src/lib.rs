@@ -12,7 +12,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::*;
 use p3_util::log2_ceil_usize;
 use valida_alu_u32::{
-    add::{Add32Chip, Add32Instruction, MachineWithAdd32Chip},
+    add::{Add32Chip, Add32Instruction, MachineWithAdd32Chip, AddCarry32Instruction},
     bitwise::{
         And32Instruction, Bitwise32Chip, MachineWithBitwise32Chip, Or32Instruction,
         Xor32Instruction,
@@ -85,6 +85,9 @@ pub struct BasicMachine<F: PrimeField32 + TwoAdicField> {
     // ALU instructions
     #[instruction(add_u32)]
     add32: Add32Instruction,
+
+    #[instruction(add_u32)]
+    addc32: AddCarry32Instruction,
 
     #[instruction(sub_u32)]
     sub32: Sub32Instruction,

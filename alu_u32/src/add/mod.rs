@@ -7,7 +7,7 @@ use core::mem::transmute;
 use valida_bus::{MachineWithGeneralBus, MachineWithRangeBus8};
 use valida_cpu::MachineWithCpuChip;
 use valida_machine::{instructions, Chip, Instruction, Interaction, Operands, Word};
-use valida_opcodes::ADD32;
+use valida_opcodes::{ADD32, ADDC32};
 use valida_range::MachineWithRangeChip;
 
 use p3_air::VirtualPairCol;
@@ -23,6 +23,7 @@ pub mod stark;
 #[derive(Clone)]
 pub enum Operation {
     Add32(Word<u8>, Word<u8>, Word<u8>),
+    AddCarry32(Word<u8>, Word<u8>, Word<u8>),
 }
 
 #[derive(Default)]
@@ -68,7 +69,14 @@ where
     }
 
     fn global_receives(&self, machine: &M) -> Vec<Interaction<SC::Val>> {
-        let opcode = VirtualPairCol::constant(SC::Val::from_canonical_u32(ADD32));
+        // let opcode = VirtualPairCol::constant(SC::Val::from_canonical_u32(ADD32));
+        let opcode = VirtualPairCol::new_main(
+            vec![
+                (ADD_COL_MAP.is_add, SC::Val::from_canonical_u32(ADD32)),
+                (ADD_COL_MAP.is_carry, SC::Val::from_canonical_u32(ADDC32)),
+            ],
+            SC::Val::zero(),
+        );
         let input_1 = ADD_COL_MAP.input_1.0.map(VirtualPairCol::single_main);
         let input_2 = ADD_COL_MAP.input_2.0.map(VirtualPairCol::single_main);
         let output = ADD_COL_MAP.output.0.map(VirtualPairCol::single_main);
@@ -101,8 +109,11 @@ impl Add32Chip {
                 cols.input_2 = c.transform(F::from_canonical_u8);
                 cols.output = a.transform(F::from_canonical_u8);
 
+                cols.sum = (*b + *c).transform(F::from_canonical_u8);
+
                 let mut carry_1 = 0;
                 let mut carry_2 = 0;
+                let mut carry_3 = 0;
                 if b[3] as u32 + c[3] as u32 > 255 {
                     carry_1 = 1;
                     cols.carry[0] = F::one();
@@ -112,9 +123,42 @@ impl Add32Chip {
                     cols.carry[1] = F::one();
                 }
                 if b[1] as u32 + c[1] as u32 + carry_2 > 255 {
+                    carry_3 = 1;
                     cols.carry[2] = F::one();
                 }
+                if b[0] as u32 + c[0] as u32 + carry_3 > 255 {
+                    cols.carry[3] = F::one();
+                }
                 cols.is_real = F::one();
+                cols.is_add = F::one();
+            },
+            Operation::AddCarry32(a, b, c) => {
+                cols.input_1 = b.transform(F::from_canonical_u8);
+                cols.input_2 = c.transform(F::from_canonical_u8);
+                cols.output = a.transform(F::from_canonical_u8);
+
+                cols.sum = (*b + *c).transform(F::from_canonical_u8);
+
+                let mut carry_1 = 0;
+                let mut carry_2 = 0;
+                let mut carry_3 = 0;
+                if b[3] as u32 + c[3] as u32 > 255 {
+                    carry_1 = 1;
+                    cols.carry[0] = F::one();
+                }
+                if b[2] as u32 + c[2] as u32 + carry_1 > 255 {
+                    carry_2 = 1;
+                    cols.carry[1] = F::one();
+                }
+                if b[1] as u32 + c[1] as u32 + carry_2 > 255 {
+                    carry_3 = 1;
+                    cols.carry[2] = F::one();
+                }
+                if b[0] as u32 + c[0] as u32 + carry_3 > 255 {
+                    cols.carry[3] = F::one();
+                }
+                cols.is_real = F::one();
+                cols.is_carry = F::one();
             }
         }
         row
@@ -126,7 +170,7 @@ pub trait MachineWithAdd32Chip<F: Field>: MachineWithCpuChip<F> {
     fn add_u32_mut(&mut self) -> &mut Add32Chip;
 }
 
-instructions!(Add32Instruction);
+instructions!(Add32Instruction,AddCarry32Instruction);
 
 impl<M, F> Instruction<M, F> for Add32Instruction
 where
@@ -163,6 +207,48 @@ where
             .add_u32_mut()
             .operations
             .push(Operation::Add32(a, b, c));
+        state.cpu_mut().push_bus_op(imm, opcode, ops);
+
+        state.range_check(a);
+    }
+}
+
+impl<M, F> Instruction<M, F> for AddCarry32Instruction
+where
+    M: MachineWithAdd32Chip<F> + MachineWithRangeChip<F, 256>,
+    F: Field,
+{
+    const OPCODE: u32 = ADDC32;
+
+    fn execute(state: &mut M, ops: Operands<i32>) {
+        let opcode = <Self as Instruction<M, F>>::OPCODE;
+        let clk = state.cpu().clock;
+        let pc = state.cpu().pc;
+        let mut imm: Option<Word<u8>> = None;
+        let read_addr_1 = (state.cpu().fp as i32 + ops.b()) as u32;
+        let write_addr = (state.cpu().fp as i32 + ops.a()) as u32;
+        let b = state
+            .mem_mut()
+            .read(clk, read_addr_1, true, pc, opcode, 0, "");
+        let c = if ops.is_imm() == 1 {
+            let c = (ops.c() as u32).into();
+            imm = Some(c);
+            c
+        } else {
+            let read_addr_2 = (state.cpu().fp as i32 + ops.c()) as u32;
+            state
+                .mem_mut()
+                .read(clk, read_addr_2, true, pc, opcode, 1, "")
+        };
+
+        // let a = b + c;
+        let a = if (b + c) < b { Word::from(1) } else { Word::from(0) };
+        state.mem_mut().write(clk, write_addr, a, true);
+
+        state
+            .add_u32_mut()
+            .operations
+            .push(Operation::AddCarry32(a, b, c));
         state.cpu_mut().push_bus_op(imm, opcode, ops);
 
         state.range_check(a);

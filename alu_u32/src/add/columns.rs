@@ -9,10 +9,15 @@ pub struct Add32Cols<T> {
     pub input_1: Word<T>,
     pub input_2: Word<T>,
 
-    pub carry: [T; 3],
+    pub carry: [T; 4],
 
     /// Witnessed output
     pub output: Word<T>,
+
+    pub sum: Word<T>,
+    
+    pub is_add: T,
+    pub is_carry: T,
 
     pub is_real: T,
 }

@@ -20,6 +20,7 @@ pub enum Opcode {
     STOREU8 = 13,
 
     ADD32 = 100,
+    ADDC32 = 123,
     SUB32 = 101,
     MUL32 = 102,
     DIV32 = 103,
@@ -71,6 +72,7 @@ declare_opcode!(READ_ADVICE);
 
 /// U32 ALU
 declare_opcode!(ADD32);
+declare_opcode!(ADDC32);
 declare_opcode!(SUB32);
 declare_opcode!(MUL32);
 declare_opcode!(DIV32);

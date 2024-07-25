@@ -2,7 +2,7 @@ extern crate core;
 
 use p3_baby_bear::BabyBear;
 use p3_fri::{TwoAdicFriPcs, TwoAdicFriPcsConfig};
-use valida_alu_u32::add::{Add32Instruction, MachineWithAdd32Chip};
+use valida_alu_u32::add::{Add32Instruction, MachineWithAdd32Chip, AddCarry32Instruction};
 use valida_alu_u32::lt::{Lt32Instruction, Lte32Instruction, Sle32Instruction, Slt32Instruction};
 use valida_basic::BasicMachine;
 use valida_cpu::{
@@ -621,5 +621,44 @@ fn prove_loadfp() {
     assert_eq!(
         *machine.mem().cells.get(&(0x1000 + 8)).unwrap(),
         Word([0, 0, 16, 3]) // fp(3) = 0x1003 = (0, 0, 16, 0)
+    );
+}
+
+#[test]
+fn prove_add32_carry(){
+    let program = vec![
+        InstructionWord {
+            opcode: <Imm32Instruction as Instruction<BasicMachine<BabyBear>, BabyBear>>::OPCODE,
+            operands: Operands([-4, 0, 0, 0, 0]),
+        },
+        InstructionWord {
+            opcode: <Imm32Instruction as Instruction<BasicMachine<BabyBear>, BabyBear>>::OPCODE,
+            operands: Operands([-8, 255, 255, 255, 255]),
+        },
+        InstructionWord {
+            opcode: <Imm32Instruction as Instruction<BasicMachine<BabyBear>, BabyBear>>::OPCODE,
+            operands: Operands([-12, 255, 255, 255, 255]),
+        },
+        InstructionWord {
+            opcode: <AddCarry32Instruction as Instruction<BasicMachine<BabyBear>, BabyBear>>::OPCODE,
+            operands: Operands([4, -4, -8, 0, 0]),
+        },
+        InstructionWord {
+            opcode: <AddCarry32Instruction as Instruction<BasicMachine<BabyBear>, BabyBear>>::OPCODE,
+            operands: Operands([8, -8, -12, 0, 0]),
+        },
+        InstructionWord {
+            opcode: <StopInstruction as Instruction<BasicMachine<BabyBear>, BabyBear>>::OPCODE,
+            operands: Operands::default(),
+        },
+    ];
+    let machine = prove_program(program);
+    assert_eq!(
+        *machine.mem().cells.get(&(0x1000 + 4)).unwrap(),
+        Word([0, 0, 0, 0]) 
+    );
+    assert_eq!(
+        *machine.mem().cells.get(&(0x1000 + 8)).unwrap(),
+        Word([0, 0, 0, 1]) 
     );
 }
